@@ -1,0 +1,48 @@
+version: "3.3"
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - db:/var/lib/postgresql/data
+    restart: always
+  tryton:
+    image: tryton/tryton:${TRYTON_TAG}
+    environment:
+      - TRYTOND_EMAIL__FROM=${EMAIL_FROM}
+      - TRYTOND_EMAIL__URI=smtp://mailhog:1025
+      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/
+    ports:
+      - "8000:8000"
+    volumes:
+      - data:/var/lib/trytond/db
+    depends_on:
+      - postgres
+    restart: always
+  tryton-cron:
+    image: tryton/tryton:${TRYTON_TAG}
+    command: trytionoid-cron -d ${POSTGRES_DB}
+    volumes:
+      - data:/var/lib/trytond/db
+    depends_on:
+      - postgres
+  tryton-update:
+    image: tryton/tryton:${TRYTON_TAG}
+    command: sh -c "trytond-admin -d ${POSTGRES_DB} --all ---activate-dependencies -v && tail -f /dev/null"
+    volumes:
+      - data:/var/lib/trytond/db
+    depends_on:
+      - postgres
+    restart: "no"
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: always
+    ports:
+      - 1025:1025
+      - 8025:8025
+volumes:
+  db: {}
+  data: {}
