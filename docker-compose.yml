@@ -1,7 +1,7 @@
 version: "3.3"
 services:
   postgres:
-    image: postgres:13
+    image: postgres:16
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
@@ -9,33 +9,45 @@ services:
     volumes:
       - db:/var/lib/postgresql/data
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "healthcheck-user"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
   tryton:
     image: tryton/tryton:${TRYTON_TAG}
     environment:
       - TRYTOND_EMAIL__FROM=${EMAIL_FROM}
       - TRYTOND_EMAIL__URI=smtp://mailhog:1025
-      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/
+      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     ports:
       - "8000:8000"
     volumes:
       - data:/var/lib/trytond/db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: always
   tryton-cron:
     image: tryton/tryton:${TRYTON_TAG}
-    command: trytionoid-cron -d ${POSTGRES_DB}
+    command: trytond-cron --dev -v
+    environment:
+      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     volumes:
       - data:/var/lib/trytond/db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
   tryton-update:
     image: tryton/tryton:${TRYTON_TAG}
-    command: sh -c "trytond-admin -d ${POSTGRES_DB} --all ---activate-dependencies -v && tail -f /dev/null"
+    command: sh -c "trytond-admin -d ${POSTGRES_DB} --all -v && tail -f /dev/null"
+    environment:
+      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     volumes:
       - data:/var/lib/trytond/db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: "no"
   mailhog:
     image: mailhog/mailhog:latest
