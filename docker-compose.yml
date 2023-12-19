@@ -9,6 +9,11 @@ services:
     volumes:
       - db:/var/lib/postgresql/data
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "healthcheck-user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   tryton:
     image: tryton/tryton:${TRYTON_TAG}
     environment:
@@ -20,24 +25,31 @@ services:
     volumes:
       - data:/var/lib/trytond/db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: always
   tryton-cron:
     image: tryton/tryton:${TRYTON_TAG}
-    command: trytond-cron -d ${POSTGRES_DB}
+    command: trytond-cron --dev -v
+    environment:
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     volumes:
       - data:/var/lib/trytond/db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
   tryton-update:
     image: tryton/tryton:${TRYTON_TAG}
     command: sh -c "trytond-admin -d ${POSTGRES_DB} --all -v && tail -f /dev/null"
     environment:
-      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - TRYTOND_DATABASE__URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
     volumes:
       - data:/var/lib/trytond/db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: "no"
   mailhog:
     image: mailhog/mailhog:latest
